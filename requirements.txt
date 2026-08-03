@@ -5,7 +5,10 @@ streamlit>=1.32.0,<2
 python-dotenv>=1.0.0
 requests>=2.31.0
 pydantic>=2.0.0
+pandas>=2.0.0
 
-# DB (NCP Cloud DB 연동 시 사용 — 드라이버는 실제 DB 종류에 맞게 조정)
+# Test
+pytest>=8.0.0
+
+# DB — NCP Cloud DB(MySQL) 사용 시 주석 해제
 # pymysql>=1.1.0
-# sqlalchemy>=2.0.0
