@@ -570,8 +570,21 @@ Developer
 2. feature 브랜치 생성
 3. 커밋 · push
 4. Pull Request → main
-5. 리뷰 후 머지
+5. 검토자(@jinhgit) 승인 후 머지
 ```
+
+### PR · 머지 정책
+
+| 항목 | 설정 |
+|------|------|
+| **자동 머지 (Auto-merge)** | 비활성 — PR이 올라와도 자동으로 머지되지 않음 |
+| **main 직접 push** | 브랜치 보호로 제한 (PR 경유) |
+| **필수 승인** | 최소 **1명** Approve |
+| **Code Owner 리뷰** | 필수 — [`.github/CODEOWNERS`](./.github/CODEOWNERS) 기준 **@jinhgit** |
+| **stale review** | 새 push 시 기존 승인 무효화 (`dismiss_stale_reviews`) |
+
+팀원이 PR을 올리면 CODEOWNERS에 따라 **검토자 `@jinhgit`에게 리뷰 요청**이 갑니다.  
+승인 전에는 `main`에 머지할 수 없습니다. (관리자 계정은 GitHub 설정상 예외 가능)
 
 ### 로컬 클론
 
