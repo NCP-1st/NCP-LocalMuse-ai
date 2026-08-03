@@ -208,18 +208,24 @@ Business Logic
 
 ## 15. Folder Structure
 
+레포는 **FE / BE** 로 분리한다. (MVP: Streamlit이 BE를 직접 import)
+
 ```text
-localmuse/
+FE/                     # Streamlit UI
 ├── app.py
 ├── pages/
+├── components/
+└── assets/
+
+BE/                     # Service layer · DB · models
 ├── services/
 │   ├── clova.py
 │   ├── tourapi.py
-│   └── maps.py
+│   ├── maps.py
+│   └── course.py       # generate_course 오케스트레이션
 ├── database/
 ├── models/
-├── utils/
-└── assets/
+└── utils/
 ```
 
 ---

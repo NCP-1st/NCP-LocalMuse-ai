@@ -1,0 +1,11 @@
+# LocalMuse AI — root dependencies (Python 3.11)
+# FE/BE 공통 설치: pip install -r requirements.txt
+
+streamlit>=1.32.0,<2
+python-dotenv>=1.0.0
+requests>=2.31.0
+pydantic>=2.0.0
+
+# DB (NCP Cloud DB 연동 시 사용 — 드라이버는 실제 DB 종류에 맞게 조정)
+# pymysql>=1.1.0
+# sqlalchemy>=2.0.0

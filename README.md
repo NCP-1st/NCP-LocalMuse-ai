@@ -448,23 +448,41 @@ Service Layer에 분리하여 구현한다.
 
 ## 17. 프로젝트 구조
 
-PRD Part 2 권장 구조:
+협업 기준: 레포를 **`FE/`(프론트) · `BE/`(백엔드 서비스 레이어)** 로 분리한다.  
+MVP에서는 별도 API 서버 없이 Streamlit이 `BE` 모듈을 직접 import 한다. (PRD: Backend = Streamlit)
 
 ```text
-localmuse/
-├── app.py                 # Streamlit 진입점
-├── pages/                 # 페이지 단위 UI
-├── services/
-│   ├── clova.py           # CLOVA Studio
-│   ├── tourapi.py         # 한국관광공사 TourAPI
-│   └── maps.py            # NAVER Maps
-├── database/              # NCP Cloud DB 연동
-├── models/                # 도메인 모델
-├── utils/                 # 공통 유틸
-└── assets/                # 정적 리소스
+.
+├── FE/                         # Frontend (Streamlit UI)
+│   ├── app.py                  # 진입점 · 메인 플로우
+│   ├── pages/                  # multipage 확장
+│   ├── components/             # 지도 · 코스 카드 등 UI 조각
+│   ├── assets/
+│   └── README.md
+├── BE/                         # Backend (Service Layer · DB · Models)
+│   ├── services/
+│   │   ├── clova.py            # CLOVA Studio
+│   │   ├── tourapi.py          # 한국관광공사 TourAPI
+│   │   ├── maps.py             # NAVER Maps
+│   │   └── course.py           # generate_course() 오케스트레이션
+│   ├── database/               # NCP Cloud DB
+│   ├── models/                 # User · Location · Course · CourseLocation
+│   ├── utils/                  # config 등
+│   └── README.md
+├── docs/
+│   └── PRD-SUMMARY.md
+├── requirements.txt
+├── .env.example
+└── README.md
 ```
 
-> 실제 레포 루트 배치(모노레포 여부, 패키지명 등)는 스캐폴딩 시 본 구조를 기준으로 맞춘다.
+### 로컬 실행
+
+```bash
+pip install -r requirements.txt
+cp .env.example .env   # API 키 입력
+streamlit run FE/app.py
+```
 
 ---
 
