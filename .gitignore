@@ -35,9 +35,11 @@ Thumbs.db
 # Logs / local data
 *.log
 logs/
+data/
 data/local/
 *.sqlite3
 *.db
+tests/_tmp_*.sqlite3
 
 # Jupyter
 .ipynb_checkpoints/
