@@ -453,24 +453,31 @@ MVP에서는 별도 API 서버 없이 Streamlit이 `BE` 모듈을 직접 import 
 
 ```text
 .
-├── FE/                         # Frontend (Streamlit UI)
-│   ├── app.py                  # 진입점 · 메인 플로우
-│   ├── pages/                  # multipage 확장
-│   ├── components/             # 지도 · 코스 카드 등 UI 조각
-│   ├── assets/
+├── FE/                              # Frontend (Streamlit UI)
+│   ├── app.py                       # 홈 · 코스 추천 메인
+│   ├── pages/
+│   │   ├── 2_저장_코스.py
+│   │   └── 3_시스템_상태.py
+│   ├── components/                  # hero, form, card, map, panel
+│   ├── lib/                         # bootstrap, session
+│   ├── assets/styles.css
 │   └── README.md
-├── BE/                         # Backend (Service Layer · DB · Models)
+├── BE/                              # Backend (Service Layer · DB · Models)
 │   ├── services/
-│   │   ├── clova.py            # CLOVA Studio
-│   │   ├── tourapi.py          # 한국관광공사 TourAPI
-│   │   ├── maps.py             # NAVER Maps
-│   │   └── course.py           # generate_course() 오케스트레이션
-│   ├── database/               # NCP Cloud DB
-│   ├── models/                 # User · Location · Course · CourseLocation
-│   ├── utils/                  # config 등
+│   │   ├── clova.py                 # CLOVA Studio Chat Completions
+│   │   ├── tourapi.py               # 한국관광공사 TourAPI
+│   │   ├── maps.py                  # NAVER Maps Geocoding / route
+│   │   ├── course.py                # generate_course() 오케스트레이션
+│   │   └── health.py                # 연동 상태
+│   ├── database/                    # SQLite / NCP Cloud DB
+│   ├── models/                      # entities + pydantic schemas
+│   ├── utils/                       # config, regions, retry, json
 │   └── README.md
-├── docs/
-│   └── PRD-SUMMARY.md
+├── tests/                           # pytest
+├── scripts/
+│   ├── run_app.sh
+│   └── run_tests.sh
+├── docs/PRD-SUMMARY.md
 ├── requirements.txt
 ├── .env.example
 └── README.md
@@ -479,9 +486,15 @@ MVP에서는 별도 API 서버 없이 Streamlit이 `BE` 모듈을 직접 import 
 ### 로컬 실행
 
 ```bash
+python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env   # API 키 입력
-streamlit run FE/app.py
+cp .env.example .env   # API 키 입력 (없어도 스텁 동작)
+
+./scripts/run_app.sh
+# 또는:  PYTHONPATH=. streamlit run FE/app.py
+
+./scripts/run_tests.sh
+python -m BE health
 ```
 
 ---

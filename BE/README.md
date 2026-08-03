@@ -67,6 +67,13 @@ result = generate_course(
 | `SQLITE_PATH` | 로컬 SQLite 경로 |
 | `ALLOW_STUB_WITHOUT_KEYS` | 키 없을 때 스텁 허용 (기본 true) |
 
+## CLI
+
+```bash
+python -m BE health          # 연동/DB 상태
+python -m BE course 성수 "감성 카페"   # 코스 스모크 (JSON)
+```
+
 ## 로컬 실행 / 테스트
 
 ```bash
@@ -79,6 +86,8 @@ pip install -r requirements.txt
 python -c "from BE.services.course import generate_course; print(generate_course('성수','감성 카페','3시간','도보')['title'])"
 
 # 단위 테스트
+./scripts/run_tests.sh
+# 또는
 pytest -q
 ```
 

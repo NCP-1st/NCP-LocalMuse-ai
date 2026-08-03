@@ -1,0 +1,56 @@
+/* LocalMuse AI — light PC Web shell (MVP, not mobile-optimized) */
+
+.block-container {
+  padding-top: 1.5rem;
+  max-width: 1100px;
+}
+
+h1, h2, h3 {
+  letter-spacing: -0.02em;
+}
+
+.lm-hero {
+  padding: 0.5rem 0 1rem 0;
+}
+
+.lm-muted {
+  color: #5c6570;
+  font-size: 0.95rem;
+}
+
+.lm-badge {
+  display: inline-block;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: #eef3ff;
+  color: #2f4f9b;
+  margin-right: 0.35rem;
+}
+
+.lm-badge.warn {
+  background: #fff4e5;
+  color: #9a5b00;
+}
+
+.lm-badge.ok {
+  background: #e8f7ee;
+  color: #1b6b3a;
+}
+
+.lm-place-card {
+  border: 1px solid #e6e8eb;
+  border-radius: 12px;
+  padding: 0.9rem 1rem;
+  margin-bottom: 0.75rem;
+  background: #fff;
+}
+
+.lm-route {
+  font-size: 0.95rem;
+  color: #333;
+  padding: 0.6rem 0.8rem;
+  background: #f7f8fa;
+  border-radius: 8px;
+}

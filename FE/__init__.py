@@ -1,0 +1,1 @@
+"""LocalMuse AI Frontend package."""
