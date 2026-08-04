@@ -155,6 +155,9 @@ def generate_course(
         "candidates_count": len(candidates),
         "message": None,
         "fallback_note": course.get("fallback_note"),
+        "quality": course.get("quality"),
+        "attempt": course.get("attempt"),
+        "retry": course.get("retry"),
         "stages": stages,
         "elapsed_ms": None,
     }

@@ -98,7 +98,10 @@ def render_sidebar_form(
                     _apply_demo(loc, purpose, t, tr)
                     st.rerun()
 
-        st.caption("데모 클릭 시 입력란을 채우고 바로 추천을 실행합니다.")
+        st.caption(
+            "클릭 시 입력란을 채운 뒤 자동으로 추천을 실행합니다. "
+            "메인 화면의 「지금 데모 실행」과 동일합니다."
+        )
 
     # 데모 직후 자동 submit
     if is_demo:
