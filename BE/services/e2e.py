@@ -47,22 +47,23 @@ def run_seongsu_e2e(*, save: bool = False, probe: bool = True) -> dict[str, Any]
     route = result.get("route") or {}
     markers = route.get("markers") or []
 
-    tour_live = _probe_ok(health, "TourAPI")
-    clova_live = result.get("source") == "clova"
-    maps_geocode_live = _probe_ok(health, "NAVER Maps Geocode") or _probe_ok(
-        health, "NAVER Maps"
-    )
+    integ = result.get("integration") or {}
+    clova_live = result.get("source") == "clova" or bool(integ.get("clova_live"))
+    maps_geocode_live = _probe_ok(health, "NAVER Maps Geocode")
     maps_js_ready = bool(
-        settings.naver_map_client_id or settings.naver_openapi_client_id
+        settings.naver_map_client_id
+        or settings.naver_openapi_client_id
+        or integ.get("maps_js")
     )
 
-    # 후보가 stub content_id 인지
+    # 장소 content_id 로 live 판정 (probe 없이도 가능)
     stub_places = sum(
         1
         for p in places
         if str(p.get("content_id") or "").startswith("stub")
     )
-    places_look_live = len(places) > 0 and stub_places == 0 and tour_live
+    places_look_live = len(places) > 0 and stub_places == 0
+    tour_live = places_look_live or bool(integ.get("tour_live"))
 
     map_render = "text"
     if route.get("available") and maps_js_ready:

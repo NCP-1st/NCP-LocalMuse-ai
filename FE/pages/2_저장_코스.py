@@ -20,8 +20,21 @@ st.set_page_config(
 )
 inject_styles()
 
+from BE.database.connection import get_connection_info  # noqa: E402
+from BE.utils.config import clear_settings_cache  # noqa: E402
+
+clear_settings_cache()
+db_info = get_connection_info()
+
 st.markdown(icon_heading("save", "저장 코스", level=1, size=26), unsafe_allow_html=True)
-st.caption("로컬 SQLite / NCP Cloud DB에 저장된 추천 결과")
+st.caption(
+    f"저장소: **{db_info.get('kind')}**"
+    + (
+        f" (MySQL 설정됨, fallback={db_info.get('fallback_sqlite')})"
+        if db_info.get("mysql_configured")
+        else " (로컬 파일)"
+    )
+)
 
 course_id = st.number_input("Course ID", min_value=1, step=1, value=1)
 cols = st.columns(2)

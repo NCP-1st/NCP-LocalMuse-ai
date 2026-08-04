@@ -10,5 +10,5 @@ pandas>=2.0.0
 # Test
 pytest>=8.0.0
 
-# DB — NCP Cloud DB(MySQL) 사용 시 주석 해제
-# pymysql>=1.1.0
+# DB — NCP Cloud DB(MySQL). 로컬에서 실패 시 SQLite 폴백 (DB_FALLBACK_SQLITE=true)
+pymysql>=1.1.0
