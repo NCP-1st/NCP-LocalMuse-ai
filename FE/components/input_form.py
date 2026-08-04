@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Callable
 
 import streamlit as st
 
@@ -30,12 +31,35 @@ class TripFormData:
     is_demo: bool = False
 
 
+def make_demo_on_click(
+    location: str,
+    purpose: str,
+    time: str,
+    transport: str,
+) -> Callable[[], None]:
+    """
+    Streamlit on_click 콜백 팩토리.
+
+    콜백은 다음 스크립트 실행의 *위젯 생성 전*에 호출되므로
+    form_* session_state 를 안전하게 수정할 수 있다.
+    """
+
+    def _callback() -> None:
+        st.session_state["form_location"] = location
+        st.session_state["form_purpose"] = purpose
+        st.session_state["form_time"] = time
+        st.session_state["form_transport"] = transport
+        st.session_state["demo_submit"] = True
+
+    return _callback
+
+
 def render_sidebar_form(
     *,
     default_region: str = "서울",
     default_nickname: str = "guest",
 ) -> TripFormData:
-    # 위젯 기본값: session_state 우선 (데모 원클릭용)
+    # 위젯 생성 전에만 기본값 초기화 (키가 없을 때만)
     if "form_location" not in st.session_state:
         st.session_state["form_location"] = default_region
     if "form_purpose" not in st.session_state:
@@ -47,6 +71,7 @@ def render_sidebar_form(
     if "form_nickname" not in st.session_state:
         st.session_state["form_nickname"] = default_nickname
 
+    # 데모 콜백이 세팅한 플래그 (위젯 생성 전에 pop)
     is_demo = bool(st.session_state.pop("demo_submit", False))
 
     with st.sidebar:
@@ -83,27 +108,31 @@ def render_sidebar_form(
 
         st.divider()
         st.markdown("**⚡ 데모 원클릭 (PRD)**")
-        if st.button(
+        st.button(
             "성수 3시간 · 감성 카페+산책",
             use_container_width=True,
             type="secondary",
             key="btn_demo_prd",
-        ):
-            _apply_demo(DEMO_LOCATION, DEMO_PURPOSE, DEMO_TIME, DEMO_TRANSPORT)
-            st.rerun()
+            on_click=make_demo_on_click(
+                DEMO_LOCATION, DEMO_PURPOSE, DEMO_TIME, DEMO_TRANSPORT
+            ),
+        )
 
         with st.expander("다른 프리셋", expanded=False):
             for label, loc, purpose, t, tr in PRESETS[1:]:
-                if st.button(label, key=f"preset_{label}", use_container_width=True):
-                    _apply_demo(loc, purpose, t, tr)
-                    st.rerun()
+                st.button(
+                    label,
+                    key=f"preset_{label}",
+                    use_container_width=True,
+                    on_click=make_demo_on_click(loc, purpose, t, tr),
+                )
 
         st.caption(
             "클릭 시 입력란을 채운 뒤 자동으로 추천을 실행합니다. "
             "메인 화면의 「지금 데모 실행」과 동일합니다."
         )
 
-    # 데모 직후 자동 submit
+    # 데모 콜백 직후 자동 submit
     if is_demo:
         submitted = True
 
@@ -116,11 +145,3 @@ def render_sidebar_form(
         submitted=submitted,
         is_demo=is_demo,
     )
-
-
-def _apply_demo(location: str, purpose: str, time: str, transport: str) -> None:
-    st.session_state["form_location"] = location
-    st.session_state["form_purpose"] = purpose
-    st.session_state["form_time"] = time
-    st.session_state["form_transport"] = transport
-    st.session_state["demo_submit"] = True

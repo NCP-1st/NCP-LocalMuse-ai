@@ -10,7 +10,7 @@ from FE.components.input_form import (
     DEMO_TIME,
     DEMO_TRANSPORT,
     PRESETS,
-    _apply_demo,
+    make_demo_on_click,
 )
 
 
@@ -26,19 +26,24 @@ def render_demo_panel() -> None:
             f"💬 {DEMO_PURPOSE}"
         )
     with c2:
-        if st.button(
+        # on_click: 위젯 생성 전에 form_* state 를 세팅 (StreamlitAPIException 방지)
+        st.button(
             "지금 데모 실행",
             type="primary",
             use_container_width=True,
             key="btn_demo_main",
-        ):
-            _apply_demo(DEMO_LOCATION, DEMO_PURPOSE, DEMO_TIME, DEMO_TRANSPORT)
-            st.rerun()
+            on_click=make_demo_on_click(
+                DEMO_LOCATION, DEMO_PURPOSE, DEMO_TIME, DEMO_TRANSPORT
+            ),
+        )
 
     st.markdown("**빠른 프리셋**")
     cols = st.columns(len(PRESETS))
     for col, (label, loc, purpose, t, tr) in zip(cols, PRESETS):
         with col:
-            if st.button(label, key=f"main_preset_{label}", use_container_width=True):
-                _apply_demo(loc, purpose, t, tr)
-                st.rerun()
+            st.button(
+                label,
+                key=f"main_preset_{label}",
+                use_container_width=True,
+                on_click=make_demo_on_click(loc, purpose, t, tr),
+            )
