@@ -15,7 +15,7 @@ from FE.lib.bootstrap import ensure_repo_root_on_path
 ensure_repo_root_on_path()
 
 from BE.database import repository as repo  # noqa: E402
-from BE.services.course import generate_course  # noqa: E402
+from BE.services.health import get_health  # noqa: E402
 from BE.utils.config import get_settings  # noqa: E402
 from FE.components import (  # noqa: E402
     inject_styles,
@@ -23,11 +23,18 @@ from FE.components import (  # noqa: E402
     render_hero,
     render_sidebar_form,
 )
+from FE.components.demo_panel import render_demo_panel  # noqa: E402
+from FE.components.integration_banner import render_integration_banner  # noqa: E402
+from FE.components.pipeline_status import (  # noqa: E402
+    render_stage_timeline,
+    run_course_with_stage_ui,
+)
 from FE.lib import session  # noqa: E402
 
 st.set_page_config(
     page_title="LocalMuse AI",
-    page_icon="🧭",
+    # 이모지 page_icon 사용 금지 — 선형 SVG 는 본문 icons 모듈 사용
+    page_icon=None,
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -38,18 +45,22 @@ def main() -> None:
     settings = get_settings()
     render_hero()
 
+    health = get_health(probe=False)
+    render_integration_banner(health)
+
     form = render_sidebar_form(
         default_region=settings.default_region,
         default_nickname=session.get_nickname(),
     )
     session.set_nickname(form.nickname)
 
-    # 빈 화면 안내
     if not form.submitted and not session.get_result():
         st.info(
-            "왼쪽에서 위치·목적·시간·이동수단을 입력한 뒤 "
-            "**코스 추천 받기**를 눌러 주세요."
+            "왼쪽에서 조건을 입력하거나, 아래 **데모 원클릭**으로 "
+            "PRD 시나리오를 바로 실행하세요."
         )
+        render_demo_panel()
+        st.divider()
         _render_empty_guide()
         return
 
@@ -58,22 +69,32 @@ def main() -> None:
             st.warning("여행 목적을 입력해 주세요. (FR-01 자연어 입력)")
             return
 
+        if form.is_demo:
+            from FE.components.icons import icon_text
+
+            # toast icon 슬롯은 이모지 전용 → 생략, 본문에 선형 SVG 사용
+            st.toast("PRD 데모 시나리오 실행 중…")
+            st.markdown(
+                f"{icon_text('zap', '데모 실행')} · "
+                f"{form.location} · {form.time} · {form.transport}",
+                unsafe_allow_html=True,
+            )
+            st.caption(form.purpose)
+
         user_id = None
         try:
             user_id = repo.ensure_user(form.nickname)
         except Exception:
-            # 저장 실패해도 추천은 진행
             pass
 
-        with st.spinner("AI가 여행 코스를 생성하고 있습니다… (TourAPI → CLOVA → Maps)"):
-            result = generate_course(
-                location=form.location,
-                purpose=form.purpose,
-                time=form.time,
-                transport=form.transport,
-                user_id=user_id,
-                save=True,
-            )
+        result = run_course_with_stage_ui(
+            location=form.location,
+            purpose=form.purpose,
+            time=form.time,
+            transport=form.transport,
+            user_id=user_id,
+            save=True,
+        )
 
         session.set_result(
             result,
@@ -83,13 +104,48 @@ def main() -> None:
                 "time": form.time,
                 "transport": form.transport,
                 "nickname": form.nickname,
+                "is_demo": form.is_demo,
             },
         )
 
     result = session.get_result()
     if result:
+        # 다시 데모 / 새 추천
+        with st.sidebar:
+            if st.button("새 추천 시작 (결과 초기화)", use_container_width=True):
+                session.clear_result()
+                st.rerun()
+
         client_id = settings.naver_map_client_id or settings.naver_openapi_client_id
         render_course_result(result, naver_client_id=client_id or None)
+        _render_pipeline_meta(result)
+        render_stage_timeline(result)
+
+
+def _render_pipeline_meta(result: dict) -> None:
+    source = result.get("source")
+    if source == "fallback":
+        st.warning(
+            "AI(CLOVA) 대신 **fallback 코스**가 사용되었습니다. "
+            "`.env`의 `CLOVA_API_KEY`를 확인하거나, 잠시 후 다시 시도해 주세요."
+            + (
+                f" ({result.get('fallback_note')})"
+                if result.get("fallback_note")
+                else ""
+            )
+        )
+    quality = result.get("quality") or {}
+    if quality:
+        st.caption(
+            f"품질 점수: {quality.get('score', '-')} / 100 · "
+            f"이유 있는 장소 {quality.get('with_reason', 0)}/"
+            f"{quality.get('place_count', 0)}"
+        )
+    elapsed = result.get("elapsed_ms")
+    if elapsed is not None:
+        st.caption(
+            f"생성 소요: {elapsed} ms · 후보 {result.get('candidates_count', 0)}곳"
+        )
 
 
 def _render_empty_guide() -> None:
@@ -108,9 +164,9 @@ def _render_empty_guide() -> None:
     st.markdown(
         """
 ### Demo 시나리오 (PRD)
-1. 현재 위치 허용 (또는 지역 입력: **성수**)
-2. 입력 예: *성수에서 3시간 동안 혼자 감성 카페와 산책 코스를 추천해줘.*
-3. TourAPI 후보 → CLOVA 코스/이유 → 지도 동선 확인
+1. **「지금 데모 실행」** 또는 사이드바 **성수 3시간 · 감성 카페+산책**
+2. 단계 표시: TourAPI → CLOVA → Maps → 저장 (progress bar)
+3. 장소 카드 + 지도 동선 + 파이프라인 로그 확인
 """
     )
 

@@ -508,6 +508,7 @@ python -m BE health
 | Prompt | **JSON 출력 고정** |
 | API 연동 | **Service Layer 분리** (`services/`) |
 | 시크릿 | API Key는 **환경변수** (코드·Git 커밋 금지) |
+| 아이콘 | **이모지 금지** — 선형 SVG (`FE/components/icons.py`, [docs/ICON_CONVENTION.md](./docs/ICON_CONVENTION.md)) |
 
 ---
 

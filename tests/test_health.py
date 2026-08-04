@@ -5,6 +5,8 @@ def test_health_shape():
     h = get_health()
     assert "services" in h
     assert "db_ok" in h
+    assert "readiness" in h
+    assert "setup_hints" in h
     assert isinstance(h["summary"], list)
     names = {s["service"] for s in h["services"]}
     assert "TourAPI" in names

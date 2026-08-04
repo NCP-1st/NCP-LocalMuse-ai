@@ -8,12 +8,16 @@ PRD AI Workflow:
 from __future__ import annotations
 
 import logging
+import time as time_mod
+from collections.abc import Callable
 from typing import Any, Optional
 
 from BE.database import repository as repo
 from BE.services import clova, maps, tourapi
 
 logger = logging.getLogger(__name__)
+
+StageCallback = Callable[[str, dict[str, Any]], None]
 
 
 def generate_course(
@@ -26,21 +30,13 @@ def generate_course(
     save: bool = True,
     current_latitude: Optional[float] = None,
     current_longitude: Optional[float] = None,
+    on_stage: StageCallback | None = None,
 ) -> dict[str, Any]:
     """
     자연어 조건으로 여행 코스를 생성한다.
 
-    Args:
-        location: 현재 위치 / 지역
-        purpose: 여행 목적 (자연어)
-        time: 이용 가능 시간
-        transport: 이동수단
-        user_id: 저장 시 사용자 id (optional)
-        save: True 이면 Course/History DB 저장 시도
-        current_latitude/longitude: 지도 시작점 (optional)
-
-    Returns:
-        title, story, places, route, route_note, source, course_id, message?
+    on_stage(stage_name, payload): 진행 단계 콜백
+      - tourapi | clova | maps | save | done
     """
     logger.info(
         "generate_course location=%s time=%s transport=%s",
@@ -48,6 +44,18 @@ def generate_course(
         time,
         transport,
     )
+
+    stages: list[dict[str, Any]] = []
+    t0 = time_mod.perf_counter()
+
+    def emit(name: str, **payload: Any) -> None:
+        item = {"stage": name, **payload}
+        stages.append(item)
+        if on_stage:
+            try:
+                on_stage(name, payload)
+            except Exception:
+                logger.exception("on_stage callback error")
 
     query = {
         "location": location,
@@ -57,39 +65,38 @@ def generate_course(
     }
 
     # 1) TourAPI 후보
+    emit("tourapi", status="start", message="관광 데이터 조회 중…")
     try:
         candidates = tourapi.get_location(location, keyword=purpose, max_items=20)
     except Exception:
         logger.exception("TourAPI 실패")
-        return {
-            "title": None,
-            "story": None,
-            "places": [],
-            "route": None,
-            "route_note": None,
-            "source": None,
-            "course_id": None,
-            "candidates_count": 0,
-            "message": "관광 데이터 조회에 실패했습니다. 잠시 후 다시 시도해 주세요.",
-        }
+        emit("tourapi", status="error", message="TourAPI 실패")
+        return _error_result(
+            "관광 데이터 조회에 실패했습니다. 잠시 후 다시 시도해 주세요.",
+            stages=stages,
+            t0=t0,
+        )
 
     if not candidates:
-        return {
-            "title": None,
-            "story": None,
-            "places": [],
-            "route": None,
-            "route_note": None,
-            "source": None,
-            "course_id": None,
-            "candidates_count": 0,
-            "message": "조건에 맞는 장소 후보를 찾지 못했습니다.",
-        }
+        emit("tourapi", status="empty", message="후보 없음")
+        return _error_result(
+            "조건에 맞는 장소 후보를 찾지 못했습니다.",
+            stages=stages,
+            t0=t0,
+        )
 
-    # overview 가 비어 있으면 상위 후보만 detail 보강 (호출 수 제한)
+    emit(
+        "tourapi",
+        status="ok",
+        message=f"후보 {len(candidates)}곳",
+        count=len(candidates),
+    )
+
+    # overview 보강
     candidates = _enrich_overviews(candidates, limit=8)
 
-    # 2) CLOVA 코스 생성 (내부에서 fallback 처리)
+    # 2) CLOVA 코스 생성
+    emit("clova", status="start", message="AI 코스·추천 이유 생성 중…")
     course = clova.complete_course_json(
         location=location,
         purpose=purpose,
@@ -100,19 +107,25 @@ def generate_course(
 
     places = list(course.get("places") or [])
     if not places:
-        return {
-            "title": course.get("title"),
-            "story": course.get("story"),
-            "places": [],
-            "route": None,
-            "route_note": None,
-            "source": course.get("source"),
-            "course_id": None,
-            "candidates_count": len(candidates),
-            "message": "AI 코스 생성에 실패했습니다. 잠시 후 다시 시도해 주세요.",
-        }
+        emit("clova", status="error", message="빈 코스")
+        return _error_result(
+            "AI 코스 생성에 실패했습니다. 잠시 후 다시 시도해 주세요.",
+            stages=stages,
+            t0=t0,
+            source=course.get("source"),
+            candidates_count=len(candidates),
+        )
 
-    # 3) 좌표 보강 (Maps geocode)
+    emit(
+        "clova",
+        status="ok",
+        message=f"source={course.get('source')}, places={len(places)}",
+        source=course.get("source"),
+        place_count=len(places),
+    )
+
+    # 3) 좌표 보강 + route
+    emit("maps", status="start", message="좌표·동선 구성 중…")
     places = maps.enrich_places_coordinates(places)
 
     current = None
@@ -123,6 +136,13 @@ def generate_course(
         }
 
     route = maps.build_route_payload(places, current_location=current)
+    emit(
+        "maps",
+        status="ok" if route.get("available") else "partial",
+        message="지도 동선 준비 완료" if route.get("available") else "좌표 부족 — 텍스트 동선",
+        available=bool(route.get("available")),
+        markers=len(route.get("markers") or []),
+    )
 
     result: dict[str, Any] = {
         "title": course.get("title"),
@@ -134,10 +154,17 @@ def generate_course(
         "course_id": None,
         "candidates_count": len(candidates),
         "message": None,
+        "fallback_note": course.get("fallback_note"),
+        "quality": course.get("quality"),
+        "attempt": course.get("attempt"),
+        "retry": course.get("retry"),
+        "stages": stages,
+        "elapsed_ms": None,
     }
 
-    # 4) DB 저장 (실패해도 추천 결과는 반환)
+    # 4) DB 저장
     if save:
+        emit("save", status="start", message="코스 저장 중…")
         try:
             course_id = repo.save_course(
                 title=str(result["title"] or "추천 코스"),
@@ -155,10 +182,37 @@ def generate_course(
                 },
             )
             result["course_id"] = course_id
+            emit("save", status="ok", message=f"course_id={course_id}", course_id=course_id)
         except Exception:
             logger.exception("코스 저장 실패 — 결과는 반환")
+            emit("save", status="error", message="저장 실패 (결과는 표시)")
 
+    result["elapsed_ms"] = int((time_mod.perf_counter() - t0) * 1000)
+    emit("done", status="ok", message="완료", elapsed_ms=result["elapsed_ms"])
     return result
+
+
+def _error_result(
+    message: str,
+    *,
+    stages: list[dict[str, Any]],
+    t0: float,
+    source: str | None = None,
+    candidates_count: int = 0,
+) -> dict[str, Any]:
+    return {
+        "title": None,
+        "story": None,
+        "places": [],
+        "route": None,
+        "route_note": None,
+        "source": source,
+        "course_id": None,
+        "candidates_count": candidates_count,
+        "message": message,
+        "stages": stages,
+        "elapsed_ms": int((time_mod.perf_counter() - t0) * 1000),
+    }
 
 
 def _enrich_overviews(

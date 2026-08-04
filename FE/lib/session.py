@@ -31,3 +31,8 @@ def get_nickname(default: str = "guest") -> str:
 
 def set_nickname(name: str) -> None:
     st.session_state[KEY_NICKNAME] = name.strip() or "guest"
+
+
+def clear_result() -> None:
+    st.session_state.pop(KEY_LAST_RESULT, None)
+    st.session_state.pop(KEY_LAST_QUERY, None)

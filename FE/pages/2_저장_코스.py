@@ -1,4 +1,4 @@
-"""저장된 코스 조회 (DB History / Course)."""
+"""저장된 코스 조회 (DB History / Course). 선형 SVG 아이콘."""
 
 from __future__ import annotations
 
@@ -10,12 +10,17 @@ ensure_repo_root_on_path()
 
 from BE.database.connection import connect  # noqa: E402
 from BE.database.repository import get_course  # noqa: E402
+from FE.components.icons import icon_heading  # noqa: E402
 from FE.components.styles import inject_styles  # noqa: E402
 
-st.set_page_config(page_title="저장 코스 · LocalMuse", page_icon="💾", layout="wide")
+st.set_page_config(
+    page_title="저장 코스 · LocalMuse",
+    page_icon=None,
+    layout="wide",
+)
 inject_styles()
 
-st.title("💾 저장 코스")
+st.markdown(icon_heading("save", "저장 코스", level=1, size=26), unsafe_allow_html=True)
 st.caption("로컬 SQLite / NCP Cloud DB에 저장된 추천 결과")
 
 course_id = st.number_input("Course ID", min_value=1, step=1, value=1)

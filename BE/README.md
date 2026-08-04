@@ -70,8 +70,9 @@ result = generate_course(
 ## CLI
 
 ```bash
-python -m BE health          # 연동/DB 상태
-python -m BE course 성수 "감성 카페"   # 코스 스모크 (JSON)
+python -m BE health                # 연동/DB 상태
+python -m BE health --probe        # 설정된 키로 실호출 스모크
+python -m BE course 성수 "감성 카페"  # 코스 스모크 (JSON, stage 로그 stderr)
 ```
 
 ## 로컬 실행 / 테스트

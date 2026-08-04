@@ -32,18 +32,29 @@ def render_course_result(
         st.subheader(title)
     with head_r:
         badge = "ok" if source == "clova" else "warn"
+        label = "AI (CLOVA)" if source == "clova" else "Fallback 임시 추천"
         st.markdown(
-            f'<span class="lm-badge {badge}">source: {source}</span>',
+            f'<span class="lm-badge {badge}">{label}</span>',
             unsafe_allow_html=True,
         )
         if course_id is not None:
             st.caption(f"저장 ID: {course_id}")
         if candidates is not None:
             st.caption(f"후보 {candidates}곳")
+        quality = result.get("quality") or {}
+        if quality.get("score") is not None:
+            st.caption(f"품질 {quality['score']}/100")
 
     if story:
         st.markdown("#### 지역 스토리")
         st.write(story)
+
+    # 동선 한눈에
+    if places:
+        route_chips = " → ".join(
+            f"**{i}. {p.get('name', '장소')}**" for i, p in enumerate(places, start=1)
+        )
+        st.markdown(f'<div class="lm-route">{route_chips}</div>', unsafe_allow_html=True)
 
     if not places:
         st.warning("추천 장소가 없습니다.")
