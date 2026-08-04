@@ -32,8 +32,9 @@ def render_course_result(
         st.subheader(title)
     with head_r:
         badge = "ok" if source == "clova" else "warn"
+        label = "AI (CLOVA)" if source == "clova" else "Fallback 임시 추천"
         st.markdown(
-            f'<span class="lm-badge {badge}">source: {source}</span>',
+            f'<span class="lm-badge {badge}">{label}</span>',
             unsafe_allow_html=True,
         )
         if course_id is not None:

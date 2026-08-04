@@ -7,7 +7,7 @@ NAVER CLOVA Studio 연동 (Chat Completions).
   - 지역 스토리 생성
 
 컨벤션: Prompt 출력은 JSON 고정.
-실패 시: Fallback Prompt / deterministic fallback (PRD Error Handling)
+실패 시: Fallback Prompt 재시도 → deterministic fallback (PRD Error Handling)
 """
 
 from __future__ import annotations
@@ -23,6 +23,20 @@ from BE.utils.config import get_settings
 from BE.utils.json_extract import extract_json_object
 
 logger = logging.getLogger(__name__)
+
+SYSTEM_CURATOR = (
+    "당신은 한국 로컬 여행 큐레이터입니다. "
+    "응답은 반드시 유효한 JSON 객체 하나만 출력합니다. "
+    "마크다운 코드블록, 설명 문장, 주석을 절대 포함하지 마세요. "
+    "후보 목록에 없는 장소를 새로 만들지 마세요."
+)
+
+SYSTEM_JSON_STRICT = (
+    "Output a single valid JSON object only. "
+    "No markdown, no prose, no code fences. "
+    "Keys: title, story, places, route_note. "
+    "places length must be 3 to 5."
+)
 
 
 class ClovaError(RuntimeError):
@@ -70,6 +84,7 @@ def complete_course_json(
                 time=time,
                 transport=transport,
                 candidates=candidates,
+                note="no_api_key",
             )
         raise ClovaError("CLOVA_API_KEY is not configured")
 
@@ -81,31 +96,67 @@ def complete_course_json(
         candidates=slim_candidates,
     )
 
+    # 1차: 정상 큐레이터 프롬프트
     try:
-        content = _chat_completions(
-            system=(
-                "당신은 한국 로컬 여행 큐레이터입니다. "
-                "반드시 유효한 JSON 객체만 출력하세요. "
-                "마크다운 코드블록·설명 문장 없이 JSON만 반환합니다."
-            ),
-            user=user_prompt,
-        )
+        content = _chat_completions(system=SYSTEM_CURATOR, user=user_prompt)
         data = extract_json_object(content)
         normalized = _normalize_course_json(data, candidates=candidates)
+        normalized = _ensure_place_count(
+            normalized,
+            candidates=candidates,
+            location=location,
+            purpose=purpose,
+            time=time,
+            transport=transport,
+        )
         if not normalized.get("places"):
             raise ClovaError("empty places in model JSON")
         normalized["source"] = "clova"
         return normalized
-    except Exception as exc:
-        logger.warning("CLOVA 실패 → fallback 사용: %s", exc)
-        # PRD: Fallback Prompt / fallback result
+    except Exception as first_exc:
+        logger.warning("CLOVA 1차 실패 — strict JSON 재시도: %s", first_exc)
+
+    # 2차: Fallback Prompt (더 엄격한 JSON-only) — PRD
+    try:
+        strict_user = (
+            build_course_prompt(
+                location=location,
+                purpose=purpose,
+                time=time,
+                transport=transport,
+                candidates=slim_candidates[:8],
+            )
+            + "\n\nCRITICAL: Return ONLY the JSON object. places must have 3 to 5 items."
+        )
+        content = _chat_completions(
+            system=SYSTEM_JSON_STRICT,
+            user=strict_user,
+            temperature=min(0.3, settings.clova_temperature),
+        )
+        data = extract_json_object(content)
+        normalized = _normalize_course_json(data, candidates=candidates)
+        normalized = _ensure_place_count(
+            normalized,
+            candidates=candidates,
+            location=location,
+            purpose=purpose,
+            time=time,
+            transport=transport,
+        )
+        if not normalized.get("places"):
+            raise ClovaError("empty places after strict retry")
+        normalized["source"] = "clova"
+        normalized["retry"] = "strict_json"
+        return normalized
+    except Exception as second_exc:
+        logger.warning("CLOVA 2차 실패 → deterministic fallback: %s", second_exc)
         return fallback_course(
             location=location,
             purpose=purpose,
             time=time,
             transport=transport,
             candidates=candidates,
-            note=f"clova_error:{type(exc).__name__}",
+            note=f"clova_error:{type(second_exc).__name__}",
         )
 
 
@@ -119,9 +170,16 @@ def build_course_prompt(
 ) -> str:
     """여행 큐레이터 프롬프트 (JSON 출력 고정)."""
     candidate_json = json.dumps(candidates, ensure_ascii=False, indent=2)
-    return f"""사용자의 현재 위치와 관광 데이터를 참고하여 3~5개의 장소를 추천하세요.
-후보 목록에 있는 장소 위주로 고르고, 동선이 자연스럽도록 방문 순서를 정하세요.
-각 장소에 추천 이유(reason)를 구체적으로 적으세요.
+    return f"""사용자의 현재 위치와 관광 데이터를 참고하여 정확히 3~5개의 장소를 추천하세요.
+
+규칙:
+1. 후보는 아래 [후보 장소] 목록에서만 고르세요. content_id 를 그대로 넣으세요.
+2. 방문 순서는 {transport} 이동 기준으로 동선이 자연스럽게 이어지게 하세요.
+3. 카테고리가 가능하면 다양하게 섞으세요 (예: 카페/산책/문화/식사).
+4. 각 reason 은 1~2문장, 사용자 목적("{purpose}")과 연결하세요.
+5. story 는 지역 맥락 1~3문장.
+6. duration / travel_time 은 한국어 짧은 표기 (예: "40분", "도보 12분").
+7. JSON 외 텍스트 금지.
 
 [사용자 조건]
 - 위치: {location}
@@ -165,6 +223,7 @@ def fallback_course(
 ) -> dict[str, Any]:
     """CLOVA 실패/미설정 시 Fallback (PRD)."""
     selected = _pick_diverse(candidates, limit=5)
+    move = _default_travel_label(transport)
     places: list[dict[str, Any]] = []
     for i, c in enumerate(selected):
         places.append(
@@ -175,7 +234,7 @@ def fallback_course(
                 "latitude": c.get("latitude"),
                 "longitude": c.get("longitude"),
                 "duration": "40분",
-                "travel_time": "도보 10분" if i else "출발",
+                "travel_time": move if i else "출발",
                 "reason": (
                     f"{c.get('overview') or c.get('name')} — "
                     f"'{purpose}' 요청과 {location} 일정({time}, {transport})에 맞춰 선정했습니다."
@@ -200,7 +259,12 @@ def fallback_course(
     return result
 
 
-def _chat_completions(*, system: str, user: str) -> str:
+def _chat_completions(
+    *,
+    system: str,
+    user: str,
+    temperature: float | None = None,
+) -> str:
     settings = get_settings()
     model = settings.clova_model
     url = f"{settings.clova_base_url}/v1/chat-completions/{model}"
@@ -211,7 +275,6 @@ def _chat_completions(*, system: str, user: str) -> str:
     }
     request_id = settings.clova_request_id or str(uuid.uuid4())
     headers["X-NCP-CLOVASTUDIO-REQUEST-ID"] = request_id
-    # legacy gateway key support
     if settings.clova_apigw_api_key:
         headers["X-NCP-APIGW-API-KEY"] = settings.clova_apigw_api_key
 
@@ -222,8 +285,10 @@ def _chat_completions(*, system: str, user: str) -> str:
         ],
         "topP": 0.8,
         "topK": 0,
-        "maxTokens": settings.clova_max_tokens,
-        "temperature": settings.clova_temperature,
+        "maxTokens": max(settings.clova_max_tokens, 1024),
+        "temperature": (
+            temperature if temperature is not None else settings.clova_temperature
+        ),
         "repeatPenalty": 5.0,
         "stopBefore": [],
         "includeAiFilters": False,
@@ -233,7 +298,7 @@ def _chat_completions(*, system: str, user: str) -> str:
         url,
         headers=headers,
         json=body,
-        timeout=max(settings.http_timeout_sec, 30.0),
+        timeout=max(settings.http_timeout_sec, 45.0),
     )
     if resp.status_code >= 400:
         raise ClovaError(f"HTTP {resp.status_code}: {resp.text[:300]}")
@@ -248,7 +313,6 @@ def _chat_completions(*, system: str, user: str) -> str:
     message = result.get("message") or {}
     content = message.get("content")
     if not content:
-        # OpenAI-compat style fallback
         choices = payload.get("choices") or []
         if choices:
             content = (choices[0].get("message") or {}).get("content")
@@ -292,6 +356,12 @@ def _normalize_course_json(
         cid = str(p.get("content_id") or "") or None
         name = str(p.get("name") or "").strip()
         base = (by_id.get(cid) if cid else None) or by_name.get(name) or {}
+        # fuzzy name match
+        if not base and name:
+            for k, v in by_name.items():
+                if name in k or k in name:
+                    base = v
+                    break
         places.append(
             {
                 "name": name or base.get("name") or "장소",
@@ -307,7 +377,6 @@ def _normalize_course_json(
             }
         )
 
-    # 3~5개로 클램프
     places = places[:5]
     return {
         "title": data.get("title") or "추천 로컬 코스",
@@ -316,6 +385,67 @@ def _normalize_course_json(
         "route_note": data.get("route_note")
         or " → ".join(x["name"] for x in places),
     }
+
+
+def _ensure_place_count(
+    course: dict[str, Any],
+    *,
+    candidates: list[dict[str, Any]],
+    location: str,
+    purpose: str,
+    time: str,
+    transport: str,
+) -> dict[str, Any]:
+    """places 가 3개 미만이면 후보로 패딩. 5개 초과는 이미 클램프."""
+    places = list(course.get("places") or [])
+    if len(places) >= 3:
+        course["places"] = places[:5]
+        if not course.get("route_note"):
+            course["route_note"] = " → ".join(p["name"] for p in course["places"])
+        return course
+
+    used = {str(p.get("content_id") or p.get("name")) for p in places}
+    move = _default_travel_label(transport)
+    for c in _pick_diverse(candidates, limit=8):
+        key = str(c.get("content_id") or c.get("name"))
+        if key in used:
+            continue
+        places.append(
+            {
+                "name": c.get("name"),
+                "category": c.get("category", "-"),
+                "address": c.get("address", ""),
+                "latitude": c.get("latitude"),
+                "longitude": c.get("longitude"),
+                "duration": "35분",
+                "travel_time": move if places else "출발",
+                "reason": f"{purpose} 일정에 맞춰 후보에서 보완 선정했습니다.",
+                "content_id": c.get("content_id"),
+                "image": c.get("image"),
+            }
+        )
+        used.add(key)
+        if len(places) >= 3:
+            break
+
+    course["places"] = places[:5]
+    if not course.get("title"):
+        course["title"] = f"{location} {time} 로컬 코스"
+    if not course.get("story"):
+        course["story"] = f"{location} 로컬 코스입니다. ({transport})"
+    course["route_note"] = " → ".join(p["name"] for p in course["places"] if p.get("name"))
+    return course
+
+
+def _default_travel_label(transport: str) -> str:
+    t = (transport or "").strip()
+    if "자동차" in t or "차" == t:
+        return "차량 10분"
+    if "대중" in t or "지하철" in t or "버스" in t:
+        return "대중교통 15분"
+    if "자전거" in t:
+        return "자전거 12분"
+    return "도보 10분"
 
 
 def _num(primary: Any, secondary: Any = None) -> float | None:
@@ -335,7 +465,6 @@ def _pick_diverse(candidates: list[dict[str, Any]], limit: int = 5) -> list[dict
         return []
     picked: list[dict[str, Any]] = []
     used_cat: set[str] = set()
-    # 1차: 카테고리 안 겹치게
     for c in candidates:
         cat = str(c.get("category") or "")
         if cat in used_cat:
@@ -344,7 +473,6 @@ def _pick_diverse(candidates: list[dict[str, Any]], limit: int = 5) -> list[dict
         used_cat.add(cat)
         if len(picked) >= limit:
             return picked
-    # 2차: 나머지 채우기
     for c in candidates:
         if c in picked:
             continue
