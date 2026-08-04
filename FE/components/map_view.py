@@ -1,9 +1,16 @@
 """
-지도 영역 — NAVER Dynamic Map(JS) only.
+지도 영역 — Streamlit 안정 표시 + 네이버 지도 연동.
 
-좌표: TourAPI mapx/mapy (Geocode REST 미사용)
-인증: Client ID + Web 서비스 URL (http://localhost 포트 없이)
-실패 시: st.map 폴백 또는 텍스트 동선
+중요:
+  Streamlit components.html 은 iframe(srcdoc) 안에서 maps.js 를 로드한다.
+  NCP Dynamic Map 은 등록된 Web URL 과 실제 문서 origin 을 검사하므로
+  iframe 임베드에서 'Open API 인증 실패' 가 자주 발생한다.
+  (Client ID / localhost 등록이 맞아도 실패할 수 있음)
+
+전략:
+  1) 앱 안 지도: st.map (TourAPI 좌표) — 항상 동작
+  2) 네이버 지도: 좌표/장소명 딥링크 (API 키·인증 불필요)
+  3) Dynamic Map iframe: 선택(실험) — 실패 시 안내만
 """
 
 from __future__ import annotations
@@ -11,6 +18,7 @@ from __future__ import annotations
 import json
 from html import escape
 from typing import Any
+from urllib.parse import quote
 
 import pandas as pd
 import streamlit as st
@@ -38,7 +46,8 @@ def render_map(
         )
 
     st.caption(
-        "좌표: TourAPI · 지도: NAVER Dynamic Map (Geocode REST 미사용)"
+        "좌표: TourAPI · 앱 내 지도: Streamlit map · "
+        "네이버 지도: 딥링크 (Geocode 미사용)"
     )
 
     if not route or not route.get("available"):
@@ -62,197 +71,186 @@ def render_map(
         if m.get("lat") is not None and m.get("lng") is not None
     ]
 
-    current = route.get("current")
-    client_id = (
-        naver_client_id
-        or route.get("naver_client_id")
-        or None
-    )
-    if isinstance(client_id, str):
-        client_id = client_id.strip() or None
-
-    if not rows and not current:
+    if not rows:
         st.info("마커 좌표가 없습니다. 텍스트 동선만 확인하세요.")
         return
 
-    if client_id and rows:
-        st.markdown(
-            f'{icon("check-circle", size=14, class_name="lm-icon lm-icon-ok")} '
-            f"<span>NAVER Dynamic Map · 마커 {len(rows)}개 · Polyline "
-            f"(좌표 출처: TourAPI)</span>",
-            unsafe_allow_html=True,
-        )
-        with st.expander("지도 인증이 실패하면", expanded=False):
+    # —— 1) 앱 안 안정 지도 (인증 불필요) ——
+    st.markdown(
+        f'{icon("check-circle", size=14, class_name="lm-icon lm-icon-ok")} '
+        f"<span>앱 내 지도 · 마커 {len(rows)}개 (TourAPI 좌표)</span>",
+        unsafe_allow_html=True,
+    )
+    df = pd.DataFrame(rows)
+    st.map(df[["lat", "lon"]], size=60, zoom=13)
+
+    # —— 2) 네이버 지도 딥링크 (인증 불필요, 실제 네이버 지도 앱/웹) ——
+    st.markdown("#### 네이버 지도에서 보기")
+    st.caption(
+        "Streamlit iframe 인증 문제를 피하기 위해, "
+        "네이버 지도 웹/앱으로 바로 엽니다. (Client ID 불필요)"
+    )
+
+    # 전체 동선: 첫 지점 중심
+    first = rows[0]
+    overview_url = _naver_coord_url(first["lat"], first["lon"], zoom=15)
+    st.link_button(
+        "네이버 지도에서 코스 시작 지점 열기",
+        overview_url,
+        use_container_width=True,
+        type="primary",
+    )
+
+    for r in rows:
+        c1, c2 = st.columns([3, 1])
+        with c1:
             st.markdown(
-                """
-1. NCP Application **Web 서비스 URL** 에 포트 **없이** 등록  
-   - `http://localhost`  
-   - `http://127.0.0.1`  
-2. **Dynamic Map** 체크  
-3. Client ID = `.env` 의 `NAVER_MAP_CLIENT_ID`  
-4. 브라우저 주소는 `http://localhost:8501` (등록 URL은 포트 없음)  
-5. 강력 새로고침 후 재시도  
-"""
+                f"**{r['order']}. {r['name']}**  \n"
+                f"{r.get('category') or '-'} · {r.get('address') or '-'}  \n"
+                f"`{r['lat']:.5f}, {r['lon']:.5f}`"
             )
-        _render_naver_maps(rows, client_id=client_id, current=current)
-    elif rows:
-        st.markdown(
-            f'{icon("alert", size=14, class_name="lm-icon lm-icon-warn")} '
-            f"<span>Client ID 없음 — Streamlit 기본 지도 폴백</span>",
-            unsafe_allow_html=True,
+        with c2:
+            place_url = _naver_place_url(r["name"], r["lat"], r["lon"])
+            st.link_button("네이버 지도", place_url, use_container_width=True)
+
+    # —— 3) Dynamic Map 실험 (실패 가능 — Streamlit iframe) ——
+    client_id = (naver_client_id or route.get("naver_client_id") or "").strip()
+    with st.expander(
+        "실험: 앱 안 NAVER Dynamic Map (iframe · 인증 실패 가능)",
+        expanded=False,
+    ):
+        st.warning(
+            "Streamlit 은 지도를 **iframe** 안에 넣습니다. "
+            "NCP Web URL 에 localhost 를 등록해도 iframe 문서는 별도 origin 이라 "
+            "인증 실패가 날 수 있습니다. 키/등록이 맞아도 실패할 수 있는 구조 한계입니다."
         )
-        df = pd.DataFrame(rows)
-        st.map(df[["lat", "lon"]], size=40)
-    else:
-        st.info("표시할 장소 좌표가 없습니다.")
+        st.markdown(
+            """
+**등록 확인 (Client ID 가 맞아도 필요)**  
+Web 서비스 URL (최대 10개) — 아래 **4개 모두** 시도:
 
-    if rows:
-        with st.expander("장소 좌표 목록 (TourAPI)", expanded=False):
-            st.dataframe(
-                pd.DataFrame(rows)[["order", "name", "category", "address", "lat", "lon"]],
-                hide_index=True,
-                use_container_width=True,
-            )
+| 등록 URL |
+|----------|
+| `http://localhost` |
+| `http://127.0.0.1` |
+| `http://localhost:8501` |
+| `http://127.0.0.1:8501` |
+
+공식 문서는 포트 없이라고 하지만, 환경에 따라 **포트 포함**이 필요한 경우가 있습니다.
+"""
+        )
+        if client_id:
+            _render_naver_maps_iframe(rows, client_id=client_id)
+        else:
+            st.info("NAVER_MAP_CLIENT_ID 가 없어 Dynamic Map 실험을 건너뜁니다.")
+
+    with st.expander("장소 좌표 목록", expanded=False):
+        st.dataframe(
+            pd.DataFrame(rows)[["order", "name", "category", "address", "lat", "lon"]],
+            hide_index=True,
+            use_container_width=True,
+        )
 
 
-def _render_naver_maps(
+def _naver_coord_url(lat: float, lon: float, zoom: int = 15) -> str:
+    """네이버 지도 좌표 중심 URL (API 키 불필요)."""
+    # map.naver.com v5 style center
+    return f"https://map.naver.com/v5/?c={lon},{lat},{zoom},0,0,0,dh"
+
+
+def _naver_place_url(name: str, lat: float, lon: float) -> str:
+    """장소명 검색 + 좌표 힌트."""
+    q = quote(name or f"{lat},{lon}")
+    # 검색 결과 페이지
+    return f"https://map.naver.com/v5/search/{q}?c={lon},{lat},16,0,0,0,dh"
+
+
+def _render_naver_maps_iframe(
     rows: list[dict[str, Any]],
     *,
     client_id: str,
-    current: dict[str, float] | None = None,
 ) -> None:
-    """NAVER Dynamic Map v3: 번호 마커 + Polyline + fitBounds."""
+    """Dynamic Map iframe (Streamlit 구조상 인증 실패 가능)."""
     center_lat = sum(r["lat"] for r in rows) / len(rows)
     center_lng = sum(r["lon"] for r in rows) / len(rows)
-
-    points = [
-        {
-            "lat": r["lat"],
-            "lng": r["lon"],
-            "name": r["name"],
-            "order": r["order"],
-            "category": r.get("category") or "",
-        }
-        for r in rows
-    ]
-    points_json = json.dumps(points, ensure_ascii=False)
-    current_json = json.dumps(current, ensure_ascii=False) if current else "null"
+    points_json = json.dumps(
+        [
+            {
+                "lat": r["lat"],
+                "lng": r["lon"],
+                "name": r["name"],
+                "order": r["order"],
+            }
+            for r in rows
+        ],
+        ensure_ascii=False,
+    )
     cid = escape(client_id)
 
-    # ncpKeyId = Application Client ID (Dynamic Map)
-    # 인증 실패 시 안내 HTML 표시
     html = f"""
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <style>
-    html, body {{ margin:0; padding:0; height:100%; background:#f4f6f8; font-family:-apple-system,BlinkMacSystemFont,sans-serif; }}
-    #nmap {{ width:100%; height:480px; border-radius:12px; }}
-    .nm-label {{
-      background:#2F6FED; color:#fff; border-radius:999px;
-      width:26px; height:26px; display:flex; align-items:center; justify-content:center;
-      font: 700 12px/1 sans-serif; border:2px solid #fff;
-      box-shadow:0 1px 4px rgba(0,0,0,.28);
-    }}
-    .nm-label.cur {{ background:#c0392b; width:auto; padding:0 6px; font-size:10px; }}
-    .nm-err {{
-      padding:16px 18px; color:#5c1a1a; background:#fdecec; border-radius:12px;
-      font-size:13px; line-height:1.5;
-    }}
-    .nm-err code {{ background:#fff; padding:1px 4px; border-radius:4px; }}
+    html,body{{margin:0;padding:0;height:100%;font-family:sans-serif}}
+    #nmap{{width:100%;height:420px;border-radius:12px}}
+    .nm-label{{background:#2F6FED;color:#fff;border-radius:999px;width:26px;height:26px;
+      display:flex;align-items:center;justify-content:center;font:700 12px/1 sans-serif;
+      border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.28)}}
+    .nm-err{{padding:14px;background:#fdecec;color:#5c1a1a;border-radius:12px;font-size:13px;line-height:1.5}}
+    code{{background:#fff;padding:1px 4px;border-radius:4px}}
   </style>
 </head>
 <body>
   <div id="nmap"></div>
   <script>
-    window.navermap_authFailure = function () {{
-      var el = document.getElementById('nmap');
-      if (!el) return;
-      el.innerHTML = '<div class="nm-err">'
-        + '<b>NAVER Dynamic Map 인증 실패</b><br/>'
-        + '1) NCP Application → Web 서비스 URL 에 <code>http://localhost</code> '
-        + '(포트 없이) 등록<br/>'
-        + '2) <code>http://127.0.0.1</code> 도 추가<br/>'
-        + '3) Dynamic Map 사용 체크 · Client ID 일치<br/>'
-        + '4) 브라우저 주소가 localhost 인지 확인 후 강력 새로고침'
-        + '</div>';
+    window.navermap_authFailure = function() {{
+      document.getElementById('nmap').innerHTML =
+        '<div class="nm-err"><b>Dynamic Map 인증 실패 (예상 가능)</b><br/>'
+        + 'Streamlit iframe 구조 한계일 수 있습니다.<br/>'
+        + '위쪽 <b>앱 내 지도</b>와 <b>네이버 지도 딥링크</b>를 사용하세요.<br/>'
+        + '등록 URL 재확인: <code>http://localhost</code> 및 '
+        + '<code>http://localhost:8501</code></div>';
     }};
   </script>
-  <script type="text/javascript"
-    src="https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId={cid}"
-    onerror="document.getElementById('nmap').innerHTML='<div class=nm-err>Maps JS 스크립트 로드 실패. 네트워크 또는 Client ID 를 확인하세요.</div>'"></script>
+  <script src="https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId={cid}"></script>
   <script>
-    (function() {{
+    (function(){{
       if (typeof naver === 'undefined' || !naver.maps) {{
-        // authFailure 가 이미 그렸을 수 있음
-        var el = document.getElementById('nmap');
-        if (el && !el.querySelector('.nm-err')) {{
-          el.innerHTML = '<div class="nm-err">NAVER Maps 객체를 사용할 수 없습니다. '
-            + 'Client ID / Web 서비스 URL(http://localhost) 을 확인하세요.</div>';
+        if (!document.querySelector('.nm-err')) {{
+          document.getElementById('nmap').innerHTML =
+            '<div class="nm-err">Maps 로드 실패. 딥링크/앱 내 지도를 사용하세요.</div>';
         }}
         return;
       }}
       var points = {points_json};
-      var current = {current_json};
       var map = new naver.maps.Map('nmap', {{
         center: new naver.maps.LatLng({center_lat}, {center_lng}),
         zoom: 14,
-        zoomControl: true,
-        zoomControlOptions: {{ position: naver.maps.Position.TOP_RIGHT }}
+        zoomControl: true
       }});
-
       var bounds = new naver.maps.LatLngBounds();
       var path = [];
-
-      if (current && current.latitude != null && current.longitude != null) {{
-        var curLatLng = new naver.maps.LatLng(current.latitude, current.longitude);
-        path.push(curLatLng);
-        bounds.extend(curLatLng);
+      points.forEach(function(p){{
+        var ll = new naver.maps.LatLng(p.lat, p.lng);
+        path.push(ll); bounds.extend(ll);
         new naver.maps.Marker({{
-          position: curLatLng,
-          map: map,
-          title: '현재 위치',
-          icon: {{
-            content: '<div class="nm-label cur">NOW</div>',
-            anchor: new naver.maps.Point(16, 13)
-          }}
-        }});
-      }}
-
-      points.forEach(function(p) {{
-        var latlng = new naver.maps.LatLng(p.lat, p.lng);
-        path.push(latlng);
-        bounds.extend(latlng);
-        new naver.maps.Marker({{
-          position: latlng,
-          map: map,
-          title: p.name,
-          icon: {{
-            content: '<div class="nm-label">' + p.order + '</div>',
-            anchor: new naver.maps.Point(13, 13)
-          }}
+          position: ll, map: map, title: p.name,
+          icon: {{ content: '<div class="nm-label">'+p.order+'</div>',
+                   anchor: new naver.maps.Point(13,13) }}
         }});
       }});
-
       if (path.length > 1) {{
         new naver.maps.Polyline({{
-          map: map,
-          path: path,
-          strokeColor: '#2F6FED',
-          strokeWeight: 4,
-          strokeOpacity: 0.88,
-          strokeStyle: 'solid'
+          map: map, path: path, strokeColor: '#2F6FED',
+          strokeWeight: 4, strokeOpacity: 0.88
         }});
       }}
-
-      if (points.length > 0) {{
-        map.fitBounds(bounds, {{ top: 48, right: 48, bottom: 48, left: 48 }});
-      }}
+      map.fitBounds(bounds, {{ top:40, right:40, bottom:40, left:40 }});
     }})();
   </script>
 </body>
 </html>
 """
-    components.html(html, height=500, scrolling=False)
+    components.html(html, height=440, scrolling=False)
