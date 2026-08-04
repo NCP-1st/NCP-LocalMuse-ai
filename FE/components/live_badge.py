@@ -10,7 +10,7 @@ from FE.components.icons import icon
 
 
 def render_live_badge(result: dict[str, Any], *, maps_js: bool) -> None:
-    source = result.get("source")
+    integ = result.get("integration") or {}
     places = result.get("places") or []
     stub_n = sum(
         1 for p in places if str(p.get("content_id") or "").startswith("stub")
@@ -18,22 +18,26 @@ def render_live_badge(result: dict[str, Any], *, maps_js: bool) -> None:
     route = result.get("route") or {}
     markers = len(route.get("markers") or [])
 
-    clova_live = source == "clova"
-    tour_live = len(places) > 0 and stub_n == 0
-    map_live = bool(route.get("available")) and maps_js
+    tour_live = bool(integ.get("tour_live"))
+    if not integ:
+        tour_live = len(places) > 0 and stub_n == 0
+    clova_live = bool(integ.get("clova_live")) or result.get("source") == "clova"
+    map_js = bool(integ.get("maps_js")) if integ else maps_js
+    map_render = integ.get("map_render") or route.get("render_hint") or "text"
+    map_live = bool(route.get("available")) and map_js and map_render == "naver_js"
+    saved = bool(result.get("saved") or result.get("course_id"))
+    db_kind = result.get("db_kind") or integ.get("db_kind") or integ.get("db") or "-"
 
-    bits = []
-    bits.append(_bit("TourAPI", tour_live, f"stub {stub_n}" if stub_n else "live"))
-    bits.append(_bit("CLOVA", clova_live, source or "-"))
-    bits.append(
+    bits = [
+        _bit("TourAPI", tour_live, "live" if tour_live else f"stub {stub_n}"),
+        _bit("CLOVA", clova_live, result.get("source") or "-"),
         _bit(
             "Maps",
-            map_live,
-            f"naver_js · {markers} markers"
-            if map_live
-            else ("st_map/text" if route.get("available") else "no coords"),
-        )
-    )
+            bool(route.get("available")),
+            f"{map_render} · {markers} markers",
+        ),
+        _bit("저장", saved, f"{db_kind}" + (f" #{result.get('course_id')}" if result.get("course_id") else "")),
+    ]
 
     st.markdown(
         '<div class="lm-icon-row" style="flex-wrap:wrap;gap:0.75rem;margin:0.5rem 0 1rem 0">'
@@ -42,15 +46,20 @@ def render_live_badge(result: dict[str, Any], *, maps_js: bool) -> None:
         unsafe_allow_html=True,
     )
 
-    if clova_live and tour_live and map_live:
-        st.success("실데이터 데모 모드 — TourAPI + CLOVA + NAVER Maps")
-    elif clova_live and tour_live:
+    if tour_live and clova_live and map_live:
+        st.success("실데이터 연동 — TourAPI + CLOVA + NAVER Maps")
+    elif tour_live and clova_live:
         st.info(
-            "TourAPI·CLOVA 실연동. 지도는 Client ID 설정 시 NAVER Maps 로 표시됩니다."
+            "TourAPI·CLOVA 실연동. "
+            + (
+                "지도는 좌표 기반 표시 중 (Dynamic Map Client ID 확인)."
+                if route.get("available")
+                else "지도 좌표가 부족합니다."
+            )
         )
     else:
         st.caption(
-            "스텁/부분 연동일 수 있습니다. `.env` 키와 `python -m BE e2e` 결과를 확인하세요."
+            "일부 스텁/폴백일 수 있습니다. `.env` 키와 시스템 상태 페이지를 확인하세요."
         )
 
 
