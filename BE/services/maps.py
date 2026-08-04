@@ -152,14 +152,22 @@ def build_route_payload(
     FE 지도 렌더링용 payload.
 
     Returns:
-        markers, polyline, available, current
+        markers, polyline, available, current, render_hint
+        render_hint: naver_js | st_map | text  (FE 가 Client ID 로 최종 결정)
     """
     markers: list[dict[str, Any]] = []
     polyline: list[list[float]] = []
 
-    if current_location and "latitude" in current_location and "longitude" in current_location:
+    if (
+        current_location
+        and "latitude" in current_location
+        and "longitude" in current_location
+    ):
         polyline.append(
-            [float(current_location["latitude"]), float(current_location["longitude"])]
+            [
+                float(current_location["latitude"]),
+                float(current_location["longitude"]),
+            ]
         )
 
     for i, p in enumerate(places, start=1):
@@ -179,9 +187,30 @@ def build_route_payload(
         )
         polyline.append([float(lat), float(lng)])
 
+    available = bool(markers)
+    # FE: client_id 있으면 naver_js, 없으면 st_map, 좌표 없으면 text
+    render_hint = "st_map" if available else "text"
+    if available and _map_credentials():
+        # geocode 키가 있으면 최소한 maps 연동 준비됨 — JS 는 client id 만으로도 가능
+        render_hint = "naver_js"
+
+    settings = get_settings()
+    if available and (settings.naver_map_client_id or settings.naver_openapi_client_id):
+        render_hint = "naver_js"
+    elif available:
+        render_hint = "st_map"
+
     return {
         "markers": markers,
         "polyline": polyline,
-        "available": bool(markers),
+        "available": available,
         "current": current_location,
+        "render_hint": render_hint,
+        "marker_count": len(markers),
     }
+
+
+def js_client_id() -> str | None:
+    """Dynamic Map(JS) 용 Client ID (Secret 불필요)."""
+    s = get_settings()
+    return (s.naver_map_client_id or s.naver_openapi_client_id or "").strip() or None

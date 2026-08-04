@@ -25,6 +25,7 @@ from FE.components import (  # noqa: E402
 )
 from FE.components.demo_panel import render_demo_panel  # noqa: E402
 from FE.components.integration_banner import render_integration_banner  # noqa: E402
+from FE.components.live_badge import render_live_badge  # noqa: E402
 from FE.components.pipeline_status import (  # noqa: E402
     render_stage_timeline,
     run_course_with_stage_ui,
@@ -117,6 +118,8 @@ def main() -> None:
                 st.rerun()
 
         client_id = settings.naver_map_client_id or settings.naver_openapi_client_id
+        maps_js = bool(client_id)
+        render_live_badge(result, maps_js=maps_js)
         render_course_result(result, naver_client_id=client_id or None)
         _render_pipeline_meta(result)
         render_stage_timeline(result)

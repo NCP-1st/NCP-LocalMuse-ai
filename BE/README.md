@@ -71,8 +71,10 @@ result = generate_course(
 
 ```bash
 python -m BE health                # 연동/DB 상태
-python -m BE health --probe        # 설정된 키로 실호출 스모크
-python -m BE course 성수 "감성 카페"  # 코스 스모크 (JSON, stage 로그 stderr)
+python -m BE health --probe        # 실호출 스모크 (Tour/CLOVA/Maps)
+python -m BE e2e                   # 성수 PRD 시나리오 E2E + verdict
+python -m BE course 성수 "감성 카페"  # 코스 스모크
+./scripts/e2e_seongsu.sh
 ```
 
 ## 로컬 실행 / 테스트
