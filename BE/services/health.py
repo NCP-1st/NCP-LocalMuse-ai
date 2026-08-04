@@ -47,8 +47,8 @@ def get_health(*, probe: bool = False) -> dict[str, Any]:
         {
             "service": "NAVER Maps Geocode",
             "configured": maps_geo_ok,
-            "note": "Geocoding REST (Client ID + Secret)",
-            "env": "NAVER_MAP_CLIENT_ID + SECRET",
+            "note": "선택(기본 OFF). MAPS_USE_GEOCODE=true 일 때만 호출",
+            "env": "MAPS_USE_GEOCODE + CLIENT_ID/SECRET",
         },
         {
             "service": "Database",
@@ -249,8 +249,18 @@ def _run_probes(
             {"service": "CLOVA Studio", "ok": False, "detail": "not configured"}
         )
 
-    # Maps Geocode
-    if maps_geo:
+    # Maps Geocode — 기본 비활성 (유료/구독 210 회피)
+    from BE.services.maps import maps_use_geocode
+
+    if not maps_use_geocode():
+        results.append(
+            {
+                "service": "NAVER Maps Geocode",
+                "ok": True,
+                "detail": "disabled (TourAPI coords + Dynamic Map only)",
+            }
+        )
+    elif maps_geo:
         try:
             from BE.services import maps as maps_svc
 
@@ -259,7 +269,7 @@ def _run_probes(
                 {
                     "service": "NAVER Maps Geocode",
                     "ok": coords is not None,
-                    "detail": "geocode ok" if coords else "geocode empty/fail",
+                    "detail": "geocode ok" if coords else "geocode empty/fail (210?)",
                 }
             )
         except Exception as exc:
@@ -279,12 +289,16 @@ def _run_probes(
             }
         )
 
-    # Maps JS — 네트워크 호출 없이 키 존재만
+    # Maps JS — Client ID (Dynamic Map)
     results.append(
         {
             "service": "NAVER Maps JS",
             "ok": maps_js,
-            "detail": "client_id set" if maps_js else "not configured",
+            "detail": (
+                "client_id set — Web URL: http://localhost (no port)"
+                if maps_js
+                else "not configured"
+            ),
         }
     )
 
