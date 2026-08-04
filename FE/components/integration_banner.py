@@ -22,18 +22,22 @@ def render_integration_banner(health: dict[str, Any]) -> None:
     line = (
         f"{mark('TourAPI')} TourAPI · "
         f"{mark('CLOVA Studio')} CLOVA · "
-        f"{mark('NAVER Maps')} Maps · "
+        f"{mark('NAVER Maps JS')} Maps JS · "
+        f"{mark('NAVER Maps Geocode')} Geocode · "
         f"{db_mark} DB"
     )
 
     if readiness == "ready":
-        st.success("실연동 준비 완료")
+        st.success("실연동 준비 완료 (TourAPI · CLOVA · Maps)")
+        st.markdown(line, unsafe_allow_html=True)
+    elif readiness == "ready_no_map_js":
+        st.info("TourAPI·CLOVA 키 설정됨. Maps JS Client ID 를 넣으면 NAVER 지도가 활성화됩니다.")
         st.markdown(line, unsafe_allow_html=True)
     elif readiness == "demo_stub":
         st.warning(
             "스텁/데모 모드 — 일부 API 키 미설정. "
             "키를 `.env`에 넣으면 실제 TourAPI·CLOVA·Maps 가 사용됩니다. "
-            "자세한 안내: 사이드바 **시스템 상태**"
+            "자세한 안내: 사이드바 **시스템 상태** · `python -m BE e2e`"
         )
         st.markdown(line, unsafe_allow_html=True)
     else:

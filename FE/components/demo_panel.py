@@ -20,7 +20,10 @@ def render_demo_panel() -> None:
         icon_heading("zap", "데모 원클릭", level=3, size=20),
         unsafe_allow_html=True,
     )
-    st.caption("PRD Demo Scenario — 입력 없이 바로 코스 생성 플로우를 실행합니다.")
+    st.caption(
+        "PRD Demo Scenario — 성수 3시간 감성 카페+산책. "
+        "`.env` 키가 있으면 실데이터(TourAPI+CLOVA+Maps), 없으면 스텁으로 동일 플로우 실행."
+    )
 
     c1, c2 = st.columns([2, 1])
     with c1:

@@ -82,7 +82,7 @@ def get_settings() -> Settings:
         tour_api_key=os.getenv("TOUR_API_KEY", "").strip(),
         tour_api_base_url=os.getenv(
             "TOUR_API_BASE_URL",
-            "https://apis.data.go.kr/B551011/KorService1",
+            "https://apis.data.go.kr/B551011/KorService2",
         ).rstrip("/"),
         tour_api_mobile_app=os.getenv("TOUR_API_MOBILE_APP", "LocalMuseAI"),
         db_host=os.getenv("DB_HOST", "").strip(),

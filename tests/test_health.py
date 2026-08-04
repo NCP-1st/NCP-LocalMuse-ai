@@ -11,3 +11,11 @@ def test_health_shape():
     names = {s["service"] for s in h["services"]}
     assert "TourAPI" in names
     assert "CLOVA Studio" in names
+    assert "NAVER Maps JS" in names
+    assert "NAVER Maps Geocode" in names
+
+
+def test_health_probe_without_keys():
+    h = get_health(probe=True)
+    assert isinstance(h.get("probes"), list)
+    assert len(h["probes"]) >= 3

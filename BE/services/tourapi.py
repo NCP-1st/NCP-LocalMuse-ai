@@ -121,35 +121,45 @@ def get_location(
 
 
 def get_overview(content_id: str, content_type_id: str | int | None = None) -> str:
-    """detailCommon1 로 overview 조회. 실패 시 빈 문자열."""
+    """detailCommon2 로 overview 조회. 실패 시 빈 문자열.
+
+    KorService2 detailCommon2 는 contentId 만 필수 (contentTypeId/overviewYN 넣으면 오류).
+    """
     settings = get_settings()
     if not settings.tour_api_key or not content_id:
         return ""
 
     def _call() -> str:
         params = _base_params(settings)
-        params.update(
-            {
-                "contentId": content_id,
-                "defaultYN": "Y",
-                "overviewYN": "Y",
-            }
-        )
-        if content_type_id:
-            params["contentTypeId"] = str(content_type_id)
-        url = f"{settings.tour_api_base_url}/detailCommon1"
+        params["contentId"] = content_id
+        # contentTypeId 를 넣지 않음 (KorService2 제약)
+        url = f"{_service_base(settings)}/detailCommon2"
         resp = requests.get(url, params=params, timeout=settings.http_timeout_sec)
         resp.raise_for_status()
-        items = _extract_items(resp.json())
+        data = resp.json()
+        _raise_if_tour_error(data)
+        items = _extract_items(data)
         if not items:
             return ""
         return str(items[0].get("overview") or "").strip()
 
     try:
-        return with_retry(_call, retries=1, label="TourAPI detailCommon")
+        return with_retry(_call, retries=1, label="TourAPI detailCommon2")
     except Exception:
         logger.exception("overview 조회 실패 contentId=%s", content_id)
         return ""
+
+
+def _service_base(settings: Any) -> str:
+    """KorService2 기본. 구 KorService1 URL 이면 자동 승격."""
+    base = (settings.tour_api_base_url or "").rstrip("/")
+    if base.endswith("KorService1") or base.endswith("/KorService"):
+        return base.rsplit("/", 1)[0] + "/KorService2"
+    if "KorService2" not in base:
+        # 호스트만 온 경우 등
+        if base.endswith("B551011"):
+            return base + "/KorService2"
+    return base or "https://apis.data.go.kr/B551011/KorService2"
 
 
 def _base_params(settings: Any) -> dict[str, Any]:
@@ -176,16 +186,16 @@ def _search_keyword(
         {
             "keyword": keyword,
             "contentTypeId": content_type_id,
-            "arrange": "C",  # 수정일 순
+            "arrange": "A",
             "numOfRows": num_of_rows,
             "pageNo": 1,
-            "listYN": "Y",
         }
     )
     if area_code is not None:
         params["areaCode"] = area_code
 
-    url = f"{settings.tour_api_base_url}/searchKeyword1"
+    # KorService2: searchKeyword2 (listYN 미사용)
+    url = f"{_service_base(settings)}/searchKeyword2"
     resp = requests.get(url, params=params, timeout=settings.http_timeout_sec)
     resp.raise_for_status()
     data = resp.json()
@@ -205,13 +215,12 @@ def _area_based_list(
         {
             "areaCode": area_code,
             "contentTypeId": content_type_id,
-            "arrange": "C",
+            "arrange": "A",
             "numOfRows": num_of_rows,
             "pageNo": 1,
-            "listYN": "Y",
         }
     )
-    url = f"{settings.tour_api_base_url}/areaBasedList1"
+    url = f"{_service_base(settings)}/areaBasedList2"
     resp = requests.get(url, params=params, timeout=settings.http_timeout_sec)
     resp.raise_for_status()
     data = resp.json()
