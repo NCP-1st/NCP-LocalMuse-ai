@@ -33,7 +33,8 @@ from FE.lib import session  # noqa: E402
 
 st.set_page_config(
     page_title="LocalMuse AI",
-    page_icon="🧭",
+    # 이모지 page_icon 사용 금지 — 선형 SVG 는 본문 icons 모듈 사용
+    page_icon=None,
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -69,9 +70,14 @@ def main() -> None:
             return
 
         if form.is_demo:
-            st.toast("PRD 데모 시나리오 실행 중…", icon="⚡")
+            from FE.components.icons import icon_text
+
+            # toast icon 슬롯은 이모지 전용 → 생략, 본문에 선형 SVG 사용
+            st.toast("PRD 데모 시나리오 실행 중…")
             st.markdown(
-                f"**데모 실행** · {form.location} · {form.time} · {form.transport}"
+                f"{icon_text('zap', '데모 실행')} · "
+                f"{form.location} · {form.time} · {form.transport}",
+                unsafe_allow_html=True,
             )
             st.caption(form.purpose)
 

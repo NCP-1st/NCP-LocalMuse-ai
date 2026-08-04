@@ -1,9 +1,43 @@
 /* LocalMuse AI — light PC Web shell (MVP, not mobile-optimized) */
+/* Icons: linear SVG only — no emoji (see FE/components/icons.py) */
 
 .block-container {
   padding-top: 1.5rem;
   max-width: 1100px;
 }
+
+/* —— Linear SVG icons —— */
+.lm-icon {
+  display: inline-block;
+  vertical-align: -0.2em;
+  flex-shrink: 0;
+  color: inherit;
+}
+.lm-icon-ok { color: #1b6b3a; }
+.lm-icon-warn { color: #9a5b00; }
+.lm-icon-err { color: #b42318; }
+.lm-icon-muted { color: #8b939c; }
+
+.lm-icon-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  line-height: 1.4;
+}
+
+.lm-icon-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  margin: 0.25rem 0 0.75rem 0;
+  color: inherit;
+}
+.lm-icon-heading.lm-h1 { font-size: 1.75rem; }
+.lm-icon-heading.lm-h2 { font-size: 1.35rem; }
+.lm-icon-heading.lm-h3 { font-size: 1.15rem; }
+.lm-icon-heading svg { flex-shrink: 0; }
 
 h1, h2, h3 {
   letter-spacing: -0.02em;

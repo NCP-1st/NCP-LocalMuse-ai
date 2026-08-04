@@ -1,10 +1,12 @@
-"""장소 카드 (FR-04 장소 상세)."""
+"""장소 카드 (FR-04 장소 상세). 선형 SVG 아이콘."""
 
 from __future__ import annotations
 
 from typing import Any
 
 import streamlit as st
+
+from FE.components.icons import icon_text
 
 
 def render_place_card(index: int, place: dict[str, Any]) -> None:
@@ -27,7 +29,7 @@ def render_place_card(index: int, place: dict[str, Any]) -> None:
                 unsafe_allow_html=True,
             )
             if address:
-                st.caption(f"📍 {address}")
+                st.markdown(icon_text("map-pin", address, size=14), unsafe_allow_html=True)
             if reason:
                 st.write(reason)
             lat, lng = place.get("latitude"), place.get("longitude")

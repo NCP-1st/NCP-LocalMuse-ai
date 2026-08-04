@@ -60,3 +60,5 @@ streamlit run FE/app.py
 - UI만 담당. 외부 API·DB 는 `BE.services` / `BE.database` 경유.
 - API Key 하드코딩 금지.
 - 모바일 최적화는 MVP 범위 밖 (PC Web).
+- **이모지 금지** — 장식/상태는 `FE/components/icons.py` 선형 SVG 만 사용  
+  (상세: [`docs/ICON_CONVENTION.md`](../docs/ICON_CONVENTION.md))

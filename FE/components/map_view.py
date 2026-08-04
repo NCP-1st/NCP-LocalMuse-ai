@@ -1,10 +1,7 @@
 """
-지도 영역.
+지도 영역. 선형 SVG 아이콘 사용 (이모지 금지).
 
 PRD: NAVER Maps Marker / Polyline / 현재 위치.
-- Client ID 있으면 NAVER Maps JS 를 주 지도로 사용 (번호 마커 + Polyline + fitBounds)
-- 없으면 st.map 폴백
-- 좌표 없으면 텍스트 동선만 (PRD Error Handling)
 """
 
 from __future__ import annotations
@@ -16,6 +13,8 @@ import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
 
+from FE.components.icons import icon, icon_heading
+
 
 def render_map(
     route: dict[str, Any] | None,
@@ -23,11 +22,15 @@ def render_map(
     route_note: str | None = None,
     naver_client_id: str | None = None,
 ) -> None:
-    st.subheader("지도 · 이동 동선")
+    st.markdown(
+        icon_heading("map", "지도 · 이동 동선", level=3, size=20),
+        unsafe_allow_html=True,
+    )
 
     if route_note:
         st.markdown(
-            f'<div class="lm-route">🗺 {route_note}</div>',
+            f'<div class="lm-route">{icon("route", size=16)} '
+            f"<span>{route_note}</span></div>",
             unsafe_allow_html=True,
         )
 
@@ -87,11 +90,12 @@ def _render_naver_maps(
     center_lat = sum(r["lat"] for r in rows) / len(rows)
     center_lng = sum(r["lon"] for r in rows) / len(rows)
 
-    points = [{"lat": r["lat"], "lng": r["lon"], "name": r["name"], "order": r["order"]} for r in rows]
+    points = [
+        {"lat": r["lat"], "lng": r["lon"], "name": r["name"], "order": r["order"]}
+        for r in rows
+    ]
     points_json = json.dumps(points, ensure_ascii=False)
     current_json = json.dumps(current, ensure_ascii=False) if current else "null"
-    # ncpKeyId is the modern param; ncpClientId still seen in older docs
-    client_id_js = json.dumps(client_id)
 
     html = f"""
 <!DOCTYPE html>
@@ -107,6 +111,7 @@ def _render_naver_maps(
       font: 700 12px/1 sans-serif; border:2px solid #fff;
       box-shadow:0 1px 4px rgba(0,0,0,.25);
     }}
+    .nm-label.cur {{ background:#e74c3c; font-size:10px; }}
   </style>
 </head>
 <body>
@@ -135,7 +140,7 @@ def _render_naver_maps(
           map: map,
           title: '현재 위치',
           icon: {{
-            content: '<div class="nm-label" style="background:#e74c3c">●</div>',
+            content: '<div class="nm-label cur">C</div>',
             anchor: new naver.maps.Point(12, 12)
           }}
         }});
@@ -175,7 +180,8 @@ def _render_naver_maps(
 </body>
 </html>
 """
-    # client_id_js unused in f-string body but validates encoding path
-    _ = client_id_js
-    st.markdown("##### NAVER Maps")
+    st.markdown(
+        f'{icon("map", size=16)} <strong>NAVER Maps</strong>',
+        unsafe_allow_html=True,
+    )
     components.html(html, height=480, scrolling=False)

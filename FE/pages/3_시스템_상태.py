@@ -1,4 +1,4 @@
-"""시스템 / 연동 상태 점검 페이지."""
+"""시스템 / 연동 상태 점검 페이지. 선형 SVG 아이콘."""
 
 from __future__ import annotations
 
@@ -9,12 +9,20 @@ from FE.lib.bootstrap import ensure_repo_root_on_path
 ensure_repo_root_on_path()
 
 from BE.services.health import get_health  # noqa: E402
+from FE.components.icons import icon_heading  # noqa: E402
 from FE.components.styles import inject_styles  # noqa: E402
 
-st.set_page_config(page_title="시스템 상태 · LocalMuse", page_icon="🩺", layout="wide")
+st.set_page_config(
+    page_title="시스템 상태 · LocalMuse",
+    page_icon=None,
+    layout="wide",
+)
 inject_styles()
 
-st.title("🩺 시스템 상태")
+st.markdown(
+    icon_heading("activity", "시스템 상태", level=1, size=26),
+    unsafe_allow_html=True,
+)
 st.caption("환경변수 · DB · 외부 API 설정 여부 (키 값은 표시하지 않음)")
 
 probe = st.checkbox("실호출 스모크 포함 (probe)", value=False)

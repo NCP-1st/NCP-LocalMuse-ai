@@ -107,7 +107,12 @@ def render_sidebar_form(
         )
 
         st.divider()
-        st.markdown("**⚡ 데모 원클릭 (PRD)**")
+        from FE.components.icons import icon
+
+        st.markdown(
+            f"**{icon('zap', size=16)} 데모 원클릭 (PRD)**",
+            unsafe_allow_html=True,
+        )
         st.button(
             "성수 3시간 · 감성 카페+산책",
             use_container_width=True,
