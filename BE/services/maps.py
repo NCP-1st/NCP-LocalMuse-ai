@@ -230,8 +230,13 @@ def build_route_payload(
                 "lat": flat,
                 "lng": flng,
                 "order": i,
-                "category": p.get("category"),
-                "address": p.get("address"),
+                "category": p.get("category") or "",
+                "address": p.get("address") or "",
+                "reason": p.get("reason") or "",
+                "duration": p.get("duration") or "",
+                "travel_time": p.get("travel_time") or "",
+                "image": p.get("image") or "",
+                "content_id": p.get("content_id") or "",
             }
         )
         polyline.append([flat, flng])

@@ -60,16 +60,18 @@ def render_course_result(
         st.warning("추천 장소가 없습니다.")
         return
 
-    st.markdown("#### 추천 장소")
-    for i, place in enumerate(places, start=1):
-        render_place_card(i, place)
-
     st.divider()
+    # 지도 (숫자 마커 · 화살표 동선 · 클릭 팝업 · 좌하단 루트 순서)
     render_map(
         result.get("route"),
         route_note=result.get("route_note"),
         naver_client_id=naver_client_id,
+        places=places,
     )
+
+    st.markdown("#### 추천 장소 상세")
+    for i, place in enumerate(places, start=1):
+        render_place_card(i, place)
 
     if message:
         st.info(message)
