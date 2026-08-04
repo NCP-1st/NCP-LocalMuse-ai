@@ -1,10 +1,9 @@
 """
-지도 영역 — A3 NAVER Maps 실화면.
+지도 영역 — NAVER Dynamic Map(JS) only.
 
-우선순위:
-  1) Client ID + 좌표 → NAVER Maps JS (번호 Marker + Polyline + fitBounds)
-  2) 좌표만 → st.map 폴백
-  3) 좌표 없음 → 텍스트 동선 (PRD)
+좌표: TourAPI mapx/mapy (Geocode REST 미사용)
+인증: Client ID + Web 서비스 URL (http://localhost 포트 없이)
+실패 시: st.map 폴백 또는 텍스트 동선
 """
 
 from __future__ import annotations
@@ -38,6 +37,10 @@ def render_map(
             unsafe_allow_html=True,
         )
 
+    st.caption(
+        "좌표: TourAPI · 지도: NAVER Dynamic Map (Geocode REST 미사용)"
+    )
+
     if not route or not route.get("available"):
         st.info(
             "표시할 좌표가 없어 텍스트 추천만 제공합니다. "
@@ -60,22 +63,42 @@ def render_map(
     ]
 
     current = route.get("current")
+    client_id = (
+        naver_client_id
+        or route.get("naver_client_id")
+        or None
+    )
+    if isinstance(client_id, str):
+        client_id = client_id.strip() or None
+
     if not rows and not current:
         st.info("마커 좌표가 없습니다. 텍스트 동선만 확인하세요.")
         return
 
-    use_naver = bool(naver_client_id and rows)
-    if use_naver:
+    if client_id and rows:
         st.markdown(
             f'{icon("check-circle", size=14, class_name="lm-icon lm-icon-ok")} '
-            f"<span>NAVER Maps · 마커 {len(rows)}개 · Polyline</span>",
+            f"<span>NAVER Dynamic Map · 마커 {len(rows)}개 · Polyline "
+            f"(좌표 출처: TourAPI)</span>",
             unsafe_allow_html=True,
         )
-        _render_naver_maps(rows, client_id=naver_client_id, current=current)
+        with st.expander("지도 인증이 실패하면", expanded=False):
+            st.markdown(
+                """
+1. NCP Application **Web 서비스 URL** 에 포트 **없이** 등록  
+   - `http://localhost`  
+   - `http://127.0.0.1`  
+2. **Dynamic Map** 체크  
+3. Client ID = `.env` 의 `NAVER_MAP_CLIENT_ID`  
+4. 브라우저 주소는 `http://localhost:8501` (등록 URL은 포트 없음)  
+5. 강력 새로고침 후 재시도  
+"""
+            )
+        _render_naver_maps(rows, client_id=client_id, current=current)
     elif rows:
         st.markdown(
             f'{icon("alert", size=14, class_name="lm-icon lm-icon-warn")} '
-            f"<span>NAVER_MAP_CLIENT_ID 미설정 — 기본 지도(st.map) 폴백</span>",
+            f"<span>Client ID 없음 — Streamlit 기본 지도 폴백</span>",
             unsafe_allow_html=True,
         )
         df = pd.DataFrame(rows)
@@ -84,11 +107,9 @@ def render_map(
         st.info("표시할 장소 좌표가 없습니다.")
 
     if rows:
-        with st.expander("장소 좌표 목록", expanded=False):
+        with st.expander("장소 좌표 목록 (TourAPI)", expanded=False):
             st.dataframe(
-                pd.DataFrame(rows)[
-                    [c for c in ["order", "name", "category", "address", "lat", "lon"] if c in rows[0] or c in ("order", "name", "lat", "lon")]
-                ],
+                pd.DataFrame(rows)[["order", "name", "category", "address", "lat", "lon"]],
                 hide_index=True,
                 use_container_width=True,
             )
@@ -100,7 +121,7 @@ def _render_naver_maps(
     client_id: str,
     current: dict[str, float] | None = None,
 ) -> None:
-    """NAVER Dynamic Map: 번호 마커 + Polyline + fitBounds."""
+    """NAVER Dynamic Map v3: 번호 마커 + Polyline + fitBounds."""
     center_lat = sum(r["lat"] for r in rows) / len(rows)
     center_lng = sum(r["lon"] for r in rows) / len(rows)
 
@@ -116,9 +137,10 @@ def _render_naver_maps(
     ]
     points_json = json.dumps(points, ensure_ascii=False)
     current_json = json.dumps(current, ensure_ascii=False) if current else "null"
-    # escape client id for HTML attr
     cid = escape(client_id)
 
+    # ncpKeyId = Application Client ID (Dynamic Map)
+    # 인증 실패 시 안내 HTML 표시
     html = f"""
 <!DOCTYPE html>
 <html>
@@ -126,39 +148,50 @@ def _render_naver_maps(
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <style>
-    html, body {{ margin:0; padding:0; height:100%; background:#f4f6f8; }}
+    html, body {{ margin:0; padding:0; height:100%; background:#f4f6f8; font-family:-apple-system,BlinkMacSystemFont,sans-serif; }}
     #nmap {{ width:100%; height:480px; border-radius:12px; }}
     .nm-label {{
       background:#2F6FED; color:#fff; border-radius:999px;
       width:26px; height:26px; display:flex; align-items:center; justify-content:center;
-      font: 700 12px/1 -apple-system, BlinkMacSystemFont, sans-serif;
-      border:2px solid #fff; box-shadow:0 1px 4px rgba(0,0,0,.28);
+      font: 700 12px/1 sans-serif; border:2px solid #fff;
+      box-shadow:0 1px 4px rgba(0,0,0,.28);
     }}
-    .nm-label.cur {{
-      background:#c0392b; width:28px; height:28px; font-size:10px; letter-spacing:-0.02em;
-    }}
+    .nm-label.cur {{ background:#c0392b; width:auto; padding:0 6px; font-size:10px; }}
     .nm-err {{
-      padding:16px; font:14px/1.4 sans-serif; color:#7a1f1f; background:#fdecec;
-      border-radius:12px;
+      padding:16px 18px; color:#5c1a1a; background:#fdecec; border-radius:12px;
+      font-size:13px; line-height:1.5;
     }}
+    .nm-err code {{ background:#fff; padding:1px 4px; border-radius:4px; }}
   </style>
 </head>
 <body>
   <div id="nmap"></div>
   <script>
-    window.onerror = function(msg) {{
+    window.navermap_authFailure = function () {{
       var el = document.getElementById('nmap');
-      if (el) el.innerHTML = '<div class="nm-err">Maps load error: ' + msg +
-        '<br/>Client ID / 도메인 등록(NCP Maps)을 확인하세요.</div>';
+      if (!el) return;
+      el.innerHTML = '<div class="nm-err">'
+        + '<b>NAVER Dynamic Map 인증 실패</b><br/>'
+        + '1) NCP Application → Web 서비스 URL 에 <code>http://localhost</code> '
+        + '(포트 없이) 등록<br/>'
+        + '2) <code>http://127.0.0.1</code> 도 추가<br/>'
+        + '3) Dynamic Map 사용 체크 · Client ID 일치<br/>'
+        + '4) 브라우저 주소가 localhost 인지 확인 후 강력 새로고침'
+        + '</div>';
     }};
   </script>
-  <script src="https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId={cid}"
-    onerror="document.getElementById('nmap').innerHTML='<div class=nm-err>NAVER Maps JS 로드 실패. NAVER_MAP_CLIENT_ID 와 Web 서비스 URL 등록을 확인하세요.</div>'"></script>
+  <script type="text/javascript"
+    src="https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId={cid}"
+    onerror="document.getElementById('nmap').innerHTML='<div class=nm-err>Maps JS 스크립트 로드 실패. 네트워크 또는 Client ID 를 확인하세요.</div>'"></script>
   <script>
     (function() {{
       if (typeof naver === 'undefined' || !naver.maps) {{
-        document.getElementById('nmap').innerHTML =
-          '<div class="nm-err">NAVER Maps 객체를 사용할 수 없습니다. Client ID / 허용 URL 설정을 확인하세요.</div>';
+        // authFailure 가 이미 그렸을 수 있음
+        var el = document.getElementById('nmap');
+        if (el && !el.querySelector('.nm-err')) {{
+          el.innerHTML = '<div class="nm-err">NAVER Maps 객체를 사용할 수 없습니다. '
+            + 'Client ID / Web 서비스 URL(http://localhost) 을 확인하세요.</div>';
+        }}
         return;
       }}
       var points = {points_json};
@@ -183,7 +216,7 @@ def _render_naver_maps(
           title: '현재 위치',
           icon: {{
             content: '<div class="nm-label cur">NOW</div>',
-            anchor: new naver.maps.Point(14, 14)
+            anchor: new naver.maps.Point(16, 13)
           }}
         }});
       }}

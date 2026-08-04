@@ -164,15 +164,15 @@ def generate_course(
         render_hint=route.get("render_hint"),
     )
 
+    from BE.services.maps import maps_use_geocode
+
     integration = {
         "tour_live": tour_live,
         "clova_live": clova_live,
         "maps_js": bool(js_id),
-        "maps_geocode": bool(
-            (settings.naver_map_client_id and settings.naver_map_client_secret)
-            or (settings.naver_openapi_client_id and settings.naver_openapi_client_secret)
-        ),
+        "maps_geocode": maps_use_geocode(),  # 기본 false — TourAPI 좌표 사용
         "map_render": route.get("render_hint") or "text",
+        "coord_source": "tourapi",
         "db": get_connection_info().get("kind"),
     }
 
